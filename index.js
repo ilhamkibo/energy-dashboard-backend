@@ -5,7 +5,7 @@ const app = express();
 const port = 3002;
 const util = require("util");
 
-const client = mqtt.connect("mqtt://103.181.142.170:1883");
+const client = mqtt.connect("mqtt://broker.emqx.io:1883");
 
 const dbConfig = {
   host: "localhost",
@@ -53,7 +53,7 @@ client.subscribe("toho").on("message", (topic, payload) => {
   try {
     // console.log("🚀 ~ client.subscribe ~ payload:", payload);
     const data = JSON.parse(payload);
-    console.log("🚀 ~ client.subscribe ~ data:", data);
+    // console.log("🚀 ~ client.subscribe ~ data:", data);
     const raw_data_array = [];
 
     // Iterasi melalui setiap parameter dan nilai raw_data
@@ -62,7 +62,7 @@ client.subscribe("toho").on("message", (topic, payload) => {
         raw_data_array.push(value.raw_data);
       });
     });
-    console.log(raw_data_array);
+    // console.log(raw_data_array);
 
     // Memanggil fungsi insertDB dengan raw_data_array
     insertDB(raw_data_array)
@@ -101,58 +101,81 @@ app.get("/volt", async (req, res) => {
     };
 
     let sql;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
-      sql = `
-      SELECT * FROM (
-        SELECT
-          DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-          AVG(volt3) AS value3,
-          AVG(volt2) AS value2,
-          AVG(volt1) AS value1
-        FROM logs
-        WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY DATE(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 500
-      ) AS subquery
-      ORDER BY timestamp ASC;
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-      SELECT * FROM (
-        SELECT
-          DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-          AVG(volt3) AS value3,
-          AVG(volt2) AS value2,
-          AVG(volt1) AS value1
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 12
-      ) AS subquery
-      ORDER BY timestamp ASC;
-      
-      `;
-    } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-      SELECT *
-      FROM (
-          SELECT volt3 as value3, volt2 as value2, volt1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-          FROM logs
-          WHERE DATE(timestamp) = CURDATE()
-          ORDER BY timestamp DESC
-          LIMIT 500
-      ) AS subquery
-      ORDER BY timestamp ASC;
-      `;
-    }
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
 
-    const result = await queryAsync(sql);
-    response.data = result;
+      const sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            AVG(volt3) AS value3,
+            AVG(volt2) AS value2,
+            AVG(volt1) AS value1
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+      `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      response.data = result;
+    } else {
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            AVG(volt3) AS value3,
+            AVG(volt2) AS value2,
+            AVG(volt1) AS value1
+          FROM logs
+          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+            AVG(volt3) AS value3,
+            AVG(volt2) AS value2,
+            AVG(volt1) AS value1
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 12
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+        SELECT *
+        FROM (
+            SELECT volt3 as value3, volt2 as value2, volt1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
+            FROM logs
+            WHERE DATE(timestamp) = CURDATE()
+            ORDER BY timestamp DESC
+            LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+      }
+      const result = await queryAsync(sql);
+      response.data = result;
+    }
 
     // Menutup koneksi ke database
     await connection.end();
@@ -180,52 +203,76 @@ app.get("/current", async (req, res) => {
     };
 
     let sql;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
-      sql = `
-        select * from (SELECT
-        DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-          AVG(amp3) AS value3,
-          AVG(amp2) AS value2,
-          AVG(amp1) AS value1
-        FROM logs
-        WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY DATE(timestamp)
-        ORDER BY timestamp DESC) as subquery ORDER BY timestamp ASC
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-        select * from (
-          SELECT
-          DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-          AVG(amp3) AS value3,
-          AVG(amp2) AS value2,
-          AVG(amp1) AS value1
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 12
-        ) as subquery ORDER BY timestamp ASC;
-      `;
-    } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-      SELECT *
-      FROM (
-          SELECT amp3 as value3, amp2 as value2, amp1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-          FROM logs
-          WHERE DATE(timestamp) = CURDATE()
-          ORDER BY timestamp DESC
-          LIMIT 500
-      ) AS subquery
-      ORDER BY timestamp ASC;
-      `;
-    }
 
-    const result = await queryAsync(sql);
-    response.data = result;
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+
+      sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            AVG(amp3) AS value3,
+            AVG(amp2) AS value2,
+            AVG(amp1) AS value1
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      response.data = result;
+    } else {
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+          select * from (SELECT
+          DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            AVG(amp3) AS value3,
+            AVG(amp2) AS value2,
+            AVG(amp1) AS value1
+          FROM logs
+          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC) as subquery ORDER BY timestamp ASC
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+          select * from (
+            SELECT
+            DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+            AVG(amp3) AS value3,
+            AVG(amp2) AS value2,
+            AVG(amp1) AS value1
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 12
+          ) as subquery ORDER BY timestamp ASC;
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+        SELECT *
+        FROM (
+            SELECT amp3 as value3, amp2 as value2, amp1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
+            FROM logs
+            WHERE DATE(timestamp) = CURDATE()
+            ORDER BY timestamp DESC
+            LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+      }
+      const result = await queryAsync(sql);
+      response.data = result;
+    }
 
     // Menutup koneksi ke database
     await connection.end();
@@ -253,65 +300,97 @@ app.get("/watt", async (req, res) => {
     };
 
     let sql, query;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+
       sql = `
-        select * from (
+        SELECT * FROM (
           SELECT
-        DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
-        AVG(kw) AS value
-        FROM logs
-        WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY DATE(timestamp)
-        ORDER BY timestamp DESC
-        ) as subquery order by timestamp asc
-      `;
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            SUM(kw) AS value
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
       query = `
-        SELECT DATE_FORMAT(timestamp, '%Y-%m') AS tanggal,
-          SUM(kW) AS total_kW,
-          AVG(kw) AS avg_kW
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())
-        ORDER BY tanggal;
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-        select * from (SELECT
-          YEAR(timestamp) AS year,
-          MONTH(timestamp) AS month,
-          DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
-          AVG(kw) AS value
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY timestamp
-        LIMIT 12) as subquery order by timestamp asc
-      `;
-      query = `
-        SELECT DATE_FORMAT(timestamp, '%Y') AS tanggal,
-          SUM(kW) AS total_kW,
-          AVG(kw) AS avg_kW
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        ORDER BY tanggal;
-      `;
+          SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+            SUM(kW) AS total_kW,
+            AVG(kw) AS avg_kW
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          ORDER BY timestamp;
+        `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      const result2 = await queryAsync(query, [startDate, endDate]);
+      response.data = result;
+      response.summary = result2[0];
     } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-        select * from (SELECT kw as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
-        FROM logs
-        WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 500) as subquery order by timestamp asc
-      `;
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+          select * from (
+            SELECT
+          DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
+          SUM(kw) AS value
+          FROM logs
+          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          ) as subquery order by timestamp asc
+        `;
+        query = `
+          SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+            SUM(kW) AS total_kW,
+            AVG(kw) AS avg_kW
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())
+          ORDER BY timestamp;
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+          select * from (SELECT
+            YEAR(timestamp) AS year,
+            MONTH(timestamp) AS month,
+            DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
+            SUM(kw) AS value
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY timestamp
+          LIMIT 12) as subquery order by timestamp asc
+        `;
+        query = `
+          SELECT DATE_FORMAT(timestamp, '%Y') AS timestamp,
+            SUM(kW) AS total_kW,
+            AVG(kw) AS avg_kW
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          ORDER BY timestamp;
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+          select * from (SELECT kw as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
+          FROM logs
+          WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 250) as subquery order by timestamp asc
+        `;
 
-      query = `SELECT SUM(kW) AS total_kW, AVG(kW) AS avg_kW FROM logs WHERE DATE(timestamp) = CURDATE()`;
+        query = `SELECT SUM(kW) AS total_kW, AVG(kW) AS avg_kW FROM logs WHERE DATE(timestamp) = CURDATE()`;
+      }
+
+      const result = await queryAsync(sql);
+      const result2 = await queryAsync(query);
+      response.data = result;
+      response.summary = result2[0];
     }
-
-    const result = await queryAsync(sql);
-    const result2 = await queryAsync(query);
-    console.log("🚀 ~ app.get ~ result2:", result2);
-    response.data = result;
-    response.summary = result2[0];
 
     // Menutup koneksi ke database
     await connection.end();
@@ -339,40 +418,63 @@ app.get("/frequency", async (req, res) => {
     };
 
     let sql;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
-      sql = `
-        select * from (SELECT
-          DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
-          AVG(frequency) AS value
-        FROM logs
-        WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY DATE(timestamp)
-        ORDER BY timestamp DESC) as subquery order by timestamp asc
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-        select * from (SELECT
-          DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
-          AVG(frequency) AS value
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 12) as subquery order by timestamp asc
-      `;
-    } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-        select * from (SELECT frequency as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
-        FROM logs
-        WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 500) as subquery order by timestamp asc
-      `;
-    }
 
-    const result = await queryAsync(sql);
-    response.data = result;
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+
+      sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            AVG(frequency) AS value
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      response.data = result;
+    } else {
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+          select * from (SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
+            AVG(frequency) AS value
+          FROM logs
+          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC) as subquery order by timestamp asc
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+          select * from (SELECT
+            DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
+            AVG(frequency) AS value
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 12) as subquery order by timestamp asc
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+          select * from (SELECT frequency as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
+          FROM logs
+          WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 250) as subquery order by timestamp asc
+        `;
+      }
+
+      const result = await queryAsync(sql);
+      response.data = result;
+    }
 
     // Menutup koneksi ke database
     await connection.end();
@@ -400,42 +502,65 @@ app.get("/kva", async (req, res) => {
     };
 
     let sql;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
-      sql = `
-        select * from (SELECT
-          DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
-          AVG(kva) AS value
-          FROM logs
-          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-          GROUP BY DATE(timestamp)
-          ORDER BY timestamp DESC) as subquery order by timestamp asc
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-        select * from (SELECT
-          YEAR(timestamp) AS year,
-          MONTH(timestamp) AS month,
-          DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
-          AVG(kva) AS value
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY year DESC, month DESC
-        LIMIT 12) as subquery order by timestamp asc
-      `;
-    } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-        select * from (SELECT kva as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
-        FROM logs
-        WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 500) as subquery order by timestamp asc
-      `;
-    }
 
-    const result = await queryAsync(sql);
-    response.data = result;
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+
+      sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            sum(kva) AS value
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      response.data = result;
+    } else {
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+          select * from (SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
+            AVG(kva) AS value
+            FROM logs
+            WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            GROUP BY DATE(timestamp)
+            ORDER BY timestamp DESC) as subquery order by timestamp asc
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+          select * from (SELECT
+            YEAR(timestamp) AS year,
+            MONTH(timestamp) AS month,
+            DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
+            AVG(kva) AS value
+          FROM logs
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY year DESC, month DESC
+          LIMIT 12) as subquery order by timestamp asc
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+          select * from (SELECT kva as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
+          FROM logs
+          WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 250) as subquery order by timestamp asc
+        `;
+      }
+
+      const result = await queryAsync(sql);
+      response.data = result;
+    }
 
     // Menutup koneksi ke database
     await connection.end();
@@ -463,40 +588,63 @@ app.get("/temp", async (req, res) => {
     };
 
     let sql;
-    if (req.query.date === "month") {
-      // Query untuk mendapatkan rata-rata harian untuk bulan ini
+
+    if (req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+
       sql = `
-        select * from(SELECT
-          DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            avg(temp) AS value
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
+      const result = await queryAsync(sql, [startDate, endDate]);
+      response.data = result;
+    } else {
+      if (req.query.date === "month") {
+        // Query untuk mendapatkan rata-rata harian untuk bulan ini
+        sql = `
+          select * from(SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
+              AVG(temp) AS value
+            FROM logs
+            WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            GROUP BY DATE(timestamp)
+            ORDER BY timestamp DESC) as subquery order by timestamp asc
+        `;
+      } else if (req.query.date === "year") {
+        // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
+        sql = `
+          select * from (SELECT
+            DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
             AVG(temp) AS value
           FROM logs
-          WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-          GROUP BY DATE(timestamp)
-          ORDER BY timestamp DESC) as subquery order by timestamp asc
-      `;
-    } else if (req.query.date === "year") {
-      // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-      sql = `
-        select * from (SELECT
-          DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
-          AVG(temp) AS value
-        FROM logs
-        WHERE YEAR(timestamp) = YEAR(CURDATE())
-        GROUP BY YEAR(timestamp), MONTH(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 12) as subquery order by timestamp asc
-      `;
-    } else {
-      // Default: Query untuk mendapatkan data hari ini
-      sql = `
-        select * from (SELECT temp as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
-        FROM logs
-        WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 500) as subquery order by timestamp asc
-      `;
-    }
+          WHERE YEAR(timestamp) = YEAR(CURDATE())
+          GROUP BY YEAR(timestamp), MONTH(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 12) as subquery order by timestamp asc
+        `;
+      } else {
+        // Default: Query untuk mendapatkan data hari ini
+        sql = `
+          select * from (SELECT temp as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
+          FROM logs
+          WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 250) as subquery order by timestamp asc
+        `;
+      }
 
-    const result = await queryAsync(sql);
-    response.data = result;
+      const result = await queryAsync(sql);
+      response.data = result;
+    }
 
     // Menutup koneksi ke database
     await connection.end();
@@ -509,6 +657,7 @@ app.get("/temp", async (req, res) => {
 });
 
 app.get("/kw_hour", async (req, res) => {
+  "";
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
@@ -520,13 +669,19 @@ app.get("/kw_hour", async (req, res) => {
     const response = {
       status: "success",
       data: {},
+      label: ["Watt Hour Cost"],
     };
 
     const sql =
-      "SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') as timestamp, SUM(kw * 10 / 3600 * 1300) AS hourly_cost FROM logs WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY HOUR(timestamp)";
+      "SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') as timestamp, SUM(kw * 1300 / 1000) AS value FROM logs WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY HOUR(timestamp)";
+
+    const query =
+      "SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') as timestamp, SUM(kw * 1300 / 1000) AS total_kW FROM logs WHERE DATE(timestamp) = CURDATE() ORDER BY HOUR(timestamp)";
 
     const result = await queryAsync(sql);
+    const result2 = await queryAsync(query);
     response.data = result;
+    response.summary = result2[0];
 
     // Menutup koneksi ke database
     await connection.end();
@@ -539,6 +694,7 @@ app.get("/kw_hour", async (req, res) => {
 });
 
 app.get("/kw_day", async (req, res) => {
+  "";
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
@@ -549,27 +705,20 @@ app.get("/kw_day", async (req, res) => {
     //json response format
     const response = {
       status: "success",
-      data: [
-        {
-          timestamp: "17:00-17:59",
-          day_cost: 0,
-        },
-        {
-          timestamp: "18:00-18:59",
-          day_cost: 0,
-        },
-      ],
+      data: {},
+      label: ["Watt Day Cost"],
     };
-    // const response = {
-    //   status: "success",
-    //   data: {},
-    // };
 
     const sql =
-      "SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') as timestamp, SUM(kw * 10 / 3600 * 1300) AS hourly_cost FROM logs WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY HOUR(timestamp)";
+      "SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp, SUM(kw * 1300 / 1000) AS value FROM logs WHERE MONTH(timestamp) = MONTH(CURDATE()) GROUP BY DATE(timestamp) ORDER BY DATE(timestamp)";
+
+    const query =
+      "SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp, SUM(kw * 1300 / 1000) AS total_kW FROM logs WHERE MONTH(timestamp) = MONTH(CURDATE()) ORDER BY DATE(timestamp)";
 
     const result = await queryAsync(sql);
-    // response.data = result;
+    const result2 = await queryAsync(query);
+    response.data = result;
+    response.summary = result2[0];
 
     // Menutup koneksi ke database
     await connection.end();
@@ -590,29 +739,78 @@ app.get("/kw_month", async (req, res) => {
     const queryAsync = util.promisify(connection.query).bind(connection);
 
     //json response format
-    // const response = {
-    //   status: "success",
-    //   data: {},
-    // };
     const response = {
       status: "success",
-      data: [
-        {
-          timestamp: "17:00-17:59",
-          month_cost: 0,
-        },
-        {
-          timestamp: "18:00-18:59",
-          month_cost: 0,
-        },
-      ],
+      data: {},
+      label: ["Watt Month Cost"],
     };
 
     const sql =
-      "SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') as timestamp, SUM(kw * 10 / 3600 * 1300) AS hourly_cost FROM logs WHERE DATE(timestamp) = CURDATE() GROUP BY HOUR(timestamp) ORDER BY HOUR(timestamp)";
+      "SELECT DATE_FORMAT(timestamp, '%Y-%m') as timestamp, SUM(kw * 1300 / 1000) AS value FROM logs WHERE YEAR(timestamp) = YEAR(CURDATE()) GROUP BY MONTH(timestamp) ORDER BY MONTH(timestamp)";
+
+    const query =
+      "SELECT DATE_FORMAT(timestamp, '%Y-%m') as timestamp, SUM(kw * 1300 / 1000) AS total_kW FROM logs WHERE YEAR(timestamp) = YEAR(CURDATE()) ORDER BY MONTH(timestamp)";
 
     const result = await queryAsync(sql);
-    // response.data = result;
+    const result2 = await queryAsync(query);
+    response.data = result;
+    response.summary = result2[0];
+
+    // Menutup koneksi ke database
+    await connection.end();
+    // Mengirimkan data sebagai respons
+    res.json(response);
+  } catch (error) {
+    console.error("Error fetching data from database:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/kw_custom", async (req, res) => {
+  try {
+    // Membuat koneksi ke database
+    const connection = await mysql.createConnection(dbConfig);
+
+    // Menggunakan promisify untuk mengubah callback ke Promise
+    const queryAsync = util.promisify(connection.query).bind(connection);
+
+    //json response format
+    const response = {
+      status: "success",
+      data: {},
+      label: ["Watt Month Cost"],
+    };
+
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            SUM(kw) AS value
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+        `;
+
+    query = `
+          SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+            SUM(kW) AS total_kW,
+            AVG(kw) AS avg_kW
+          FROM logs
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          ORDER BY timestamp;
+        `;
+
+    const result = await queryAsync(sql, [startDate, endDate]);
+    const result2 = await queryAsync(query, [startDate, endDate]);
+    response.data = result;
+    response.summary = result2[0];
 
     // Menutup koneksi ke database
     await connection.end();
