@@ -60,7 +60,7 @@ async function createTables(connection) {
           amp2 FLOAT,
           amp3 FLOAT,
           freq FLOAT,
-          timestamp BIGINT
+          timestamp datetime
       );
   `;
 
@@ -69,7 +69,7 @@ async function createTables(connection) {
           id INT AUTO_INCREMENT PRIMARY KEY,
           no_device INT,
           temp FLOAT,
-          timestamp BIGINT
+          timestamp datetime
       );
   `;
 
@@ -96,13 +96,12 @@ async function insertData(data) {
       if (deviceName.startsWith("Power Meter")) {
         const values = device.values.reduce((acc, value) => {
           acc[value.name.replace(" ", "_").toLowerCase()] = value.raw_data;
-          acc["timestamp"] = value.timestamp;
           return acc;
         }, {});
 
         const query = `
                   INSERT INTO power_meter (no_device, kva, kw, volt1, volt2, volt3, amp1, amp2, amp3, freq, timestamp)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
               `;
         const params = [
           noDevice,
@@ -115,7 +114,6 @@ async function insertData(data) {
           values.s_current || 0,
           values.r_current || 0,
           values.frequency || 0,
-          values.timestamp,
         ];
 
         await connection.execute(query, params);
@@ -125,9 +123,9 @@ async function insertData(data) {
         for (const value of device.values) {
           const query = `
                       INSERT INTO temp_control (no_device, temp, timestamp)
-                      VALUES (?, ?, ?)
+                      VALUES (?, ?, NOW())
                   `;
-          const params = [noDevice, value.raw_data, value.timestamp];
+          const params = [noDevice, value.raw_data];
 
           await connection.execute(query, params);
 
@@ -238,7 +236,7 @@ app.get("/volt", async (req, res) => {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
 
-    //json response format
+    // json response format
     const response = {
       status: "success",
       data: {},
@@ -247,6 +245,9 @@ app.get("/volt", async (req, res) => {
 
     let sql;
     let params = [];
+
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
 
     if (req.query.endDate) {
       const startDate = req.query.startDate;
@@ -259,8 +260,9 @@ app.get("/volt", async (req, res) => {
             AVG(volt3) AS value3,
             AVG(volt2) AS value2,
             AVG(volt1) AS value1
-          FROM logs
+          FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -268,6 +270,7 @@ app.get("/volt", async (req, res) => {
         ORDER BY timestamp ASC;
       `;
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -278,14 +281,16 @@ app.get("/volt", async (req, res) => {
             AVG(volt3) AS value3,
             AVG(volt2) AS value2,
             AVG(volt1) AS value1
-          FROM logs
+          FROM power_meter
           WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
         ) AS subquery
         ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
@@ -295,27 +300,31 @@ app.get("/volt", async (req, res) => {
             AVG(volt3) AS value3,
             AVG(volt2) AS value2,
             AVG(volt1) AS value1
-          FROM logs
+          FROM power_meter
           WHERE YEAR(timestamp) = YEAR(CURDATE())
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY YEAR(timestamp), MONTH(timestamp)
           ORDER BY timestamp DESC
           LIMIT 12
         ) AS subquery
         ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
         SELECT *
         FROM (
             SELECT volt3 as value3, volt2 as value2, volt1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM logs
+            FROM power_meter
             WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
             ORDER BY timestamp DESC
             LIMIT 250
         ) AS subquery
         ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       }
     }
 
@@ -350,6 +359,9 @@ app.get("/current", async (req, res) => {
     let sql;
     let params = [];
 
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
+
     if (req.query.endDate) {
       const startDate = req.query.startDate;
       const endDate = req.query.endDate;
@@ -361,8 +373,9 @@ app.get("/current", async (req, res) => {
             AVG(amp3) AS value3,
             AVG(amp2) AS value2,
             AVG(amp1) AS value1
-          FROM logs
+          FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -370,6 +383,7 @@ app.get("/current", async (req, res) => {
         ORDER BY timestamp ASC;
       `;
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -380,13 +394,15 @@ app.get("/current", async (req, res) => {
               AVG(amp3) AS value3,
               AVG(amp2) AS value2,
               AVG(amp1) AS value1
-            FROM logs
+            FROM power_meter
             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY DATE(timestamp)
             ORDER BY timestamp DESC
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
@@ -396,27 +412,31 @@ app.get("/current", async (req, res) => {
               AVG(amp3) AS value3,
               AVG(amp2) AS value2,
               AVG(amp1) AS value1
-            FROM logs
+            FROM power_meter
             WHERE YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY YEAR(timestamp), MONTH(timestamp)
             ORDER BY timestamp DESC
             LIMIT 12
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
           SELECT *
           FROM (
             SELECT amp3 as value3, amp2 as value2, amp1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM logs
+            FROM power_meter
             WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
             ORDER BY timestamp DESC
             LIMIT 250
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       }
     }
 
@@ -450,6 +470,10 @@ app.get("/watt", async (req, res) => {
 
     let sql, query;
     let params = [];
+
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
+
     if (req.query.endDate) {
       const startDate = req.query.startDate;
       const endDate = req.query.endDate;
@@ -459,8 +483,9 @@ app.get("/watt", async (req, res) => {
           SELECT
             DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
             SUM(kw) AS value
-          FROM logs
+          FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -472,11 +497,13 @@ app.get("/watt", async (req, res) => {
         SELECT
           SUM(kW) AS total_kW,
           AVG(kW) AS avg_kW
-        FROM logs
+        FROM power_meter
         WHERE DATE(timestamp) BETWEEN ? AND ?
+        ${device ? "AND no_device = ?" : ""}
       `;
 
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -485,8 +512,9 @@ app.get("/watt", async (req, res) => {
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
               SUM(kw) AS value
-            FROM logs
+            FROM power_meter
             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY DATE(timestamp)
             ORDER BY timestamp DESC
           ) AS subquery
@@ -497,9 +525,11 @@ app.get("/watt", async (req, res) => {
           SELECT
             SUM(kW) AS total_kW,
             AVG(kW) AS avg_kW
-          FROM logs
+          FROM power_meter
           WHERE YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())
+          ${device ? "AND no_device = ?" : ""}
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
@@ -507,8 +537,9 @@ app.get("/watt", async (req, res) => {
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
               SUM(kw) AS value
-            FROM logs
+            FROM power_meter
             WHERE YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY YEAR(timestamp), MONTH(timestamp)
             ORDER BY timestamp
             LIMIT 12
@@ -520,16 +551,19 @@ app.get("/watt", async (req, res) => {
           SELECT
             SUM(kW) AS total_kW,
             AVG(kW) AS avg_kW
-          FROM logs
+          FROM power_meter
           WHERE YEAR(timestamp) = YEAR(CURDATE())
+          ${device ? "AND no_device = ?" : ""}
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
           SELECT * FROM (
             SELECT kw AS value, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM logs
+            FROM power_meter
             WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
             ORDER BY timestamp DESC
             LIMIT 250
           ) AS subquery
@@ -540,9 +574,11 @@ app.get("/watt", async (req, res) => {
           SELECT
             SUM(kW) AS total_kW,
             AVG(kW) AS avg_kW
-          FROM logs
+          FROM power_meter
           WHERE DATE(timestamp) = CURDATE()
+          ${device ? "AND no_device = ?" : ""}
         `;
+        if (device) params.push(device);
       }
     }
 
@@ -582,6 +618,9 @@ app.get("/frequency", async (req, res) => {
     let sql;
     let params = [];
 
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
+
     if (req.query.endDate) {
       const startDate = req.query.startDate;
       const endDate = req.query.endDate;
@@ -590,9 +629,10 @@ app.get("/frequency", async (req, res) => {
         SELECT * FROM (
           SELECT
             DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-            AVG(frequency) AS value
-          FROM logs
+            AVG(freq) AS value
+          FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -600,6 +640,7 @@ app.get("/frequency", async (req, res) => {
         ORDER BY timestamp ASC;
       `;
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -607,41 +648,47 @@ app.get("/frequency", async (req, res) => {
           SELECT * FROM (
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-              AVG(frequency) AS value
-            FROM logs
+              AVG(freq) AS value
+            FROM power_meter
             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY DATE(timestamp)
             ORDER BY timestamp DESC
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
           SELECT * FROM (
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-              AVG(frequency) AS value
-            FROM logs
+              AVG(freq) AS value
+            FROM power_meter
             WHERE YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY YEAR(timestamp), MONTH(timestamp)
             ORDER BY timestamp DESC
             LIMIT 12
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
           SELECT * FROM (
-            SELECT frequency AS value, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM logs
+            SELECT freq AS value, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
+            FROM power_meter
             WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
             ORDER BY timestamp DESC
             LIMIT 250
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       }
     }
 
@@ -676,6 +723,9 @@ app.get("/kva", async (req, res) => {
     let sql;
     let params = [];
 
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
+
     if (req.query.endDate) {
       const startDate = req.query.startDate;
       const endDate = req.query.endDate;
@@ -685,8 +735,9 @@ app.get("/kva", async (req, res) => {
           SELECT
             DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
             sum(kva) AS value
-          FROM logs
+          FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -695,6 +746,7 @@ app.get("/kva", async (req, res) => {
         `;
 
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -702,11 +754,13 @@ app.get("/kva", async (req, res) => {
           select * from (SELECT
             DATE_FORMAT(timestamp, '%Y-%m-%d') as timestamp,
             AVG(kva) AS value
-            FROM logs
+            FROM power_meter
             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY DATE(timestamp)
             ORDER BY timestamp DESC) as subquery order by timestamp asc
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
@@ -715,19 +769,25 @@ app.get("/kva", async (req, res) => {
             MONTH(timestamp) AS month,
             DATE_FORMAT(timestamp, '%Y-%m') as timestamp,
             AVG(kva) AS value
-          FROM logs
+          FROM power_meter
           WHERE YEAR(timestamp) = YEAR(CURDATE())
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY YEAR(timestamp), MONTH(timestamp)
           ORDER BY year DESC, month DESC
           LIMIT 12) as subquery order by timestamp asc
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
           select * from (SELECT kva as value, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp
-          FROM logs
-          WHERE DATE(timestamp) = CURDATE() order by timestamp desc limit 250) as subquery order by timestamp asc
+          FROM power_meter
+          WHERE DATE(timestamp) = CURDATE() ${
+            device ? "AND no_device = ?" : ""
+          } order by timestamp desc limit 250) as subquery order by timestamp asc
+          
         `;
+        if (device) params.push(device);
       }
     }
 
@@ -763,6 +823,9 @@ app.get("/temp", async (req, res) => {
     let sql;
     let params = [];
 
+    // Mengambil parameter device jika ada
+    const device = req.query.device;
+
     if (req.query.endDate) {
       const startDate = req.query.startDate;
       const endDate = req.query.endDate;
@@ -772,8 +835,9 @@ app.get("/temp", async (req, res) => {
           SELECT
             DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
             AVG(temp) AS value
-          FROM logs
+          FROM temp_control
           WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
           GROUP BY DATE(timestamp)
           ORDER BY timestamp DESC
           LIMIT 250
@@ -781,6 +845,7 @@ app.get("/temp", async (req, res) => {
         ORDER BY timestamp ASC;
       `;
       params = [startDate, endDate];
+      if (device) params.push(device);
     } else {
       if (req.query.date === "month") {
         // Query untuk mendapatkan rata-rata harian untuk bulan ini
@@ -789,13 +854,15 @@ app.get("/temp", async (req, res) => {
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
               AVG(temp) AS value
-            FROM logs
+            FROM temp_control
             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY DATE(timestamp)
             ORDER BY timestamp DESC
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         sql = `
@@ -803,26 +870,30 @@ app.get("/temp", async (req, res) => {
             SELECT
               DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
               AVG(temp) AS value
-            FROM logs
+            FROM temp_control
             WHERE YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
             GROUP BY YEAR(timestamp), MONTH(timestamp)
             ORDER BY timestamp DESC
             LIMIT 12
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         sql = `
           SELECT * FROM (
             SELECT temp AS value, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM logs
+            FROM temp_control
             WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
             ORDER BY timestamp DESC
             LIMIT 250
           ) AS subquery
           ORDER BY timestamp ASC;
         `;
+        if (device) params.push(device);
       }
     }
 
