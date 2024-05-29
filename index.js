@@ -236,18 +236,25 @@ app.get("/volt", async (req, res) => {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
 
-    // json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Volt 1", "Volt 2", "Volt 3"],
-    };
-
-    let sql;
-    let params = [];
-
     // Mengambil parameter device jika ada
     const device = req.query.device;
+    let response, sql;
+    let params = [];
+
+    // json response format
+    if (device == "volt1" || device == "volt2" || device == "volt3") {
+      response = {
+        status: "success",
+        data: {},
+        label: ["Device 1", "Device 2", "Device 3"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        label: ["Volt 1", "Volt 2", "Volt 3"],
+      };
+    }
 
     if (req.query.endDate) {
       const startDate = req.query.startDate;
@@ -312,18 +319,71 @@ app.get("/volt", async (req, res) => {
         if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
-        sql = `
-        SELECT *
-        FROM (
-            SELECT volt3 as value3, volt2 as value2, volt1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-            FROM power_meter
-            WHERE DATE(timestamp) = CURDATE()
-            ${device ? "AND no_device = ?" : ""}
-            ORDER BY timestamp DESC
-            LIMIT 250
-        ) AS subquery
-        ORDER BY timestamp ASC;
-        `;
+        if (device == "volt1" || device == "volt2" || device == "volt3") {
+          sql = `
+                SELECT
+                COALESCE(d1.${device}, 0) AS value1,
+                COALESCE(d2.${device}, 0) AS value2,
+                COALESCE(d3.${device}, 0) AS value3,
+                COALESCE(d1.timestamp, d2.timestamp, d3.timestamp) AS timestamp
+            FROM
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY timestamp DESC LIMIT 250) AS d1
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY timestamp DESC LIMIT 250) AS d2
+            ON d1.timestamp = d2.timestamp
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY timestamp DESC LIMIT 250) AS d3
+            ON d1.timestamp = d3.timestamp
+
+            UNION
+
+            SELECT
+                COALESCE(d1.${device}, 0) AS "value1",
+                COALESCE(d2.${device}, 0) AS "value2",
+                COALESCE(d3.${device}, 0) AS "value3",
+                COALESCE(d1.timestamp, d2.timestamp, d3.timestamp) AS timestamp
+            FROM
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY timestamp DESC LIMIT 250) AS d2
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY timestamp DESC LIMIT 250) AS d1
+            ON d1.timestamp = d2.timestamp
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY timestamp DESC LIMIT 250) AS d3
+            ON d2.timestamp = d3.timestamp
+
+            UNION
+
+            SELECT
+                COALESCE(d1.${device}, 0) AS "value1",
+                COALESCE(d2.${device}, 0) AS "value2",
+                COALESCE(d3.${device}, 0) AS "value3",
+                COALESCE(d1.timestamp, d2.timestamp, d3.timestamp) AS timestamp
+            FROM
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY timestamp DESC LIMIT 250) AS d3
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY timestamp DESC LIMIT 250) AS d1
+            ON d1.timestamp = d3.timestamp
+            LEFT JOIN
+                (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY timestamp DESC LIMIT 250) AS d2
+            ON d2.timestamp = d3.timestamp
+
+            ORDER BY timestamp DESC;
+          `;
+        } else {
+          sql = `
+          SELECT *
+          FROM (
+              SELECT volt3 as value3, volt2 as value2, volt1 as value1, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
+              FROM power_meter
+              WHERE DATE(timestamp) = CURDATE()
+              ${device ? "AND no_device = ?" : ""}
+              ORDER BY timestamp DESC
+              LIMIT 250
+          ) AS subquery
+          ORDER BY timestamp ASC;
+          `;
+        }
+
         if (device) params.push(device);
       }
     }
@@ -349,18 +409,24 @@ app.get("/current", async (req, res) => {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
 
-    //json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Current 1", "Current 2", "Current 3"],
-    };
-
-    let sql;
-    let params = [];
-
     // Mengambil parameter device jika ada
     const device = req.query.device;
+    let sql, response;
+    let params = []; // json response format
+
+    if (device == "volt1" || device == "volt2" || device == "volt3") {
+      response = {
+        status: "success",
+        data: {},
+        label: ["Device 1", "Device 2", "Device 3"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        label: ["Volt 1", "Volt 2", "Volt 3"],
+      };
+    }
 
     if (req.query.endDate) {
       const startDate = req.query.startDate;
