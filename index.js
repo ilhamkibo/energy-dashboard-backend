@@ -743,7 +743,7 @@ app.get("/watt", async (req, res) => {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
 
-    let sql, query, response;
+    let sql, totalQuery, avgQuery, response;
     let params = [];
 
     // Mengambil parameter device jika ada
@@ -754,12 +754,20 @@ app.get("/watt", async (req, res) => {
       response = {
         status: "success",
         data: {},
+        summary: {
+          average: {},
+          total: {},
+        },
         label: ["Device 1", "Device 2", "Device 3"],
       };
     } else {
       response = {
         status: "success",
         data: {},
+        summary: {
+          average: {},
+          total: {},
+        },
         label: ["Watt"],
       };
     }
@@ -785,6 +793,21 @@ app.get("/watt", async (req, res) => {
           ON d1.timestamp = d3.timestamp
           ORDER BY timestamp ASC;
           `;
+
+        totalQuery = `
+        SELECT
+          (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 1) AS value1,
+          (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 2) AS value2,
+          (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 3) AS value3
+        `;
+
+        avgQuery = `
+        SELECT
+          (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 1) AS value1,
+          (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 2) AS value2,
+          (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 3) AS value3
+        `;
+
         params = [startDate, endDate, startDate, endDate, startDate, endDate];
       } else {
         sql = `
@@ -802,14 +825,22 @@ app.get("/watt", async (req, res) => {
           ORDER BY timestamp ASC;
         `;
 
-        query = `
+        avgQuery = `
           SELECT
-            SUM(kW) AS total_kW,
-            AVG(kW) AS avg_kW
+            AVG(kW) AS value1
           FROM power_meter
           WHERE DATE(timestamp) BETWEEN ? AND ?
           ${device ? "AND no_device = ?" : ""}
         `;
+
+        totalQuery = `
+          SELECT
+            SUM(kW) AS value1
+          FROM power_meter
+          WHERE DATE(timestamp) BETWEEN ? AND ?
+          ${device ? "AND no_device = ?" : ""}
+        `;
+
         params = [startDate, endDate];
         if (device) params.push(device);
       }
@@ -833,6 +864,20 @@ app.get("/watt", async (req, res) => {
           ON d1.timestamp = d3.timestamp
           ORDER BY timestamp ASC;
           `;
+
+          totalQuery = `
+          SELECT
+            (SELECT SUM(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1) AS value1,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2) AS value2,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 3) AS value3
+          `;
+
+          avgQuery = `
+          SELECT
+            (SELECT AVG(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1) AS value1,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2) AS value2,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE()) and no_device = 3) AS value3
+          `;
         } else {
           sql = `
             SELECT * FROM (
@@ -848,10 +893,17 @@ app.get("/watt", async (req, res) => {
             ORDER BY timestamp ASC;
           `;
 
-          query = `
+          totalQuery = `
             SELECT
-              SUM(kW) AS total_kW,
-              AVG(kW) AS avg_kW
+              SUM(kW) AS value1
+            FROM power_meter
+            WHERE YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
+          `;
+
+          avgQuery = `
+            SELECT
+              AVG(kW) AS value1
             FROM power_meter
             WHERE YEAR(timestamp) = YEAR(CURDATE()) AND MONTH(timestamp) = MONTH(CURDATE())
             ${device ? "AND no_device = ?" : ""}
@@ -877,6 +929,20 @@ app.get("/watt", async (req, res) => {
           ON d1.timestamp = d3.timestamp
           ORDER BY timestamp ASC;
           `;
+
+          totalQuery = `
+          SELECT
+            (SELECT SUM(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1) AS value1,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2) AS value2,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 3) AS value3
+          `;
+
+          avgQuery = `
+          SELECT
+            (SELECT AVG(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1) AS value1,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2) AS value2,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 3) AS value3
+          `;
         } else {
           sql = `
             SELECT * FROM (
@@ -893,10 +959,17 @@ app.get("/watt", async (req, res) => {
             ORDER BY timestamp ASC;
           `;
 
-          query = `
+          totalQuery = `
             SELECT
-              SUM(kW) AS total_kW,
-              AVG(kW) AS avg_kW
+              SUM(kW) AS value1
+            FROM power_meter
+            WHERE YEAR(timestamp) = YEAR(CURDATE())
+            ${device ? "AND no_device = ?" : ""}
+          `;
+
+          avgQuery = `
+            SELECT
+              AVG(kW) AS value1
             FROM power_meter
             WHERE YEAR(timestamp) = YEAR(CURDATE())
             ${device ? "AND no_device = ?" : ""}
@@ -922,6 +995,20 @@ app.get("/watt", async (req, res) => {
           ON d1.timestamp = d3.timestamp
           ORDER BY timestamp DESC;
           `;
+
+          totalQuery = `
+          SELECT
+            (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 1) AS value1,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 2) AS value2,
+            (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 3) AS value3
+          `;
+
+          avgQuery = `
+          SELECT
+            (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 1) AS value1,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 2) AS value2,
+            (SELECT AVG(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 3) AS value3
+          `;
         } else {
           sql = `
             SELECT * FROM (
@@ -935,10 +1022,17 @@ app.get("/watt", async (req, res) => {
             ORDER BY timestamp ASC;
           `;
 
-          query = `
+          totalQuery = `
             SELECT
-              SUM(kW) AS total_kW,
-              AVG(kW) AS avg_kW
+              SUM(kW) AS value1
+            FROM power_meter
+            WHERE DATE(timestamp) = CURDATE()
+            ${device ? "AND no_device = ?" : ""}
+          `;
+
+          avgQuery = `
+            SELECT
+              AVG(kW) AS value1
             FROM power_meter
             WHERE DATE(timestamp) = CURDATE()
             ${device ? "AND no_device = ?" : ""}
@@ -952,13 +1046,26 @@ app.get("/watt", async (req, res) => {
     const [result] = await connection.execute(sql, params);
 
     // Eksekusi query tambahan untuk summary
-    if (device !== "all") {
-      const [summaryResult] = await connection.execute(query, params);
-      response.summary = summaryResult[0];
-    }
+    const [totalResult] = await connection.execute(totalQuery, params);
+    const [avgResult] = await connection.execute(avgQuery, params);
+
+    // Transform the totalResult and avgResult to arrays of values
+    const totalValues = [
+      totalResult[0].value1,
+      totalResult[0].value2,
+      totalResult[0].value3,
+    ];
+
+    const averageValues = [
+      avgResult[0].value1,
+      avgResult[0].value2,
+      avgResult[0].value3,
+    ];
 
     // Mengatur data response
     response.data = result;
+    response.summary.total = totalValues;
+    response.summary.average = averageValues;
 
     // Menutup koneksi ke database
     await connection.end();
@@ -1525,157 +1632,81 @@ app.get("/temp", async (req, res) => {
   }
 });
 
-// app.get("/temp", async (req, res) => {
-//   try {
-//     // Membuat koneksi ke database
-//     const connection = await mysql.createConnection(dbConfig);
-
-//     let sql, response;
-//     let params = [];
-
-//     // Mengambil parameter device jika ada
-//     const device = req.query.device;
-
-//     // json response format
-//     if (device == "all") {
-//       response = {
-//         status: "success",
-//         data: {},
-//         label: ["Device 1", "Device 2", "Device 3"],
-//       };
-//     } else {
-//       response = {
-//         status: "success",
-//         data: {},
-//         label: ["Watt"],
-//       };
-//     }
-
-//     if (req.query.endDate) {
-//       const startDate = req.query.startDate;
-//       const endDate = req.query.endDate;
-
-//       sql = `
-//         SELECT * FROM (
-//           SELECT
-//             DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-//             AVG(temp) AS value
-//           FROM temp_control
-//           WHERE DATE(timestamp) BETWEEN ? AND ?
-//           ${device ? "AND no_device = ?" : ""}
-//           GROUP BY DATE(timestamp)
-//           ORDER BY timestamp DESC
-//           LIMIT 250
-//         ) AS subquery
-//         ORDER BY timestamp ASC;
-//       `;
-//       params = [startDate, endDate];
-//       if (device) params.push(device);
-//     } else {
-//       if (req.query.date === "month") {
-//         // Query untuk mendapatkan rata-rata harian untuk bulan ini
-//         sql = `
-//           SELECT * FROM (
-//             SELECT
-//               DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-//               AVG(temp) AS value
-//             FROM temp_control
-//             WHERE MONTH(timestamp) = MONTH(CURDATE()) AND YEAR(timestamp) = YEAR(CURDATE())
-//             ${device ? "AND no_device = ?" : ""}
-//             GROUP BY DATE(timestamp)
-//             ORDER BY timestamp DESC
-//           ) AS subquery
-//           ORDER BY timestamp ASC;
-//         `;
-//         if (device) params.push(device);
-//       } else if (req.query.date === "year") {
-//         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
-//         sql = `
-//           SELECT * FROM (
-//             SELECT
-//               DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-//               AVG(temp) AS value
-//             FROM temp_control
-//             WHERE YEAR(timestamp) = YEAR(CURDATE())
-//             ${device ? "AND no_device = ?" : ""}
-//             GROUP BY YEAR(timestamp), MONTH(timestamp)
-//             ORDER BY timestamp DESC
-//             LIMIT 12
-//           ) AS subquery
-//           ORDER BY timestamp ASC;
-//         `;
-//         if (device) params.push(device);
-//       } else {
-//         // Default: Query untuk mendapatkan data hari ini
-//         sql = `
-//           SELECT * FROM (
-//             SELECT temp AS value, DATE_FORMAT(timestamp, '%H:%i:%s') AS timestamp
-//             FROM temp_control
-//             WHERE DATE(timestamp) = CURDATE()
-//             ${device ? "AND no_device = ?" : ""}
-//             ORDER BY timestamp DESC
-//             LIMIT 250
-//           ) AS subquery
-//           ORDER BY timestamp ASC;
-//         `;
-//         if (device) params.push(device);
-//       }
-//     }
-
-//     // Eksekusi query
-//     const [result] = await connection.execute(sql, params);
-
-//     // Mengatur data response
-//     response.data = result;
-
-//     // Menutup koneksi ke database
-//     await connection.end();
-
-//     // Mengirimkan data sebagai respons
-//     res.json(response);
-//   } catch (error) {
-//     console.error("Error fetching data from database:", error);
-//     res.status(500).json({ error: "Internal Server Error" });
-//   }
-// });
-
 app.get("/kw_hour", async (req, res) => {
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
+    const device = req.query.device;
+    let response, sql, query;
 
     // json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Watt Hour Cost"],
-    };
+    if (device == "all") {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Device 1", "Device 2"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Watt Hour Cost"],
+      };
+    }
 
     // Query untuk mendapatkan data penggunaan listrik per jam dan total penggunaan listrik
-    const sql = `
-      SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp,
-             SUM(kw * 1300 / 1000) AS value
-      FROM logs
-      WHERE DATE(timestamp) = CURDATE()
-      GROUP BY HOUR(timestamp)
-      ORDER BY HOUR(timestamp);
-    `;
+    if (device == "all") {
+      sql = `
+        SELECT
+          COALESCE(d1.kw, 0) AS value1,
+          COALESCE(d2.kw, 0) AS value2,
+          COALESCE(d1.timestamp, d2.timestamp) AS timestamp
+        FROM
+          (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 1 GROUP BY HOUR(timestamp)) AS d1
+        LEFT JOIN
+          (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 2 GROUP BY HOUR(timestamp)) AS d2
+        ON d1.timestamp = d2.timestamp
+        ORDER BY HOUR(d1.timestamp);
+        `;
 
-    const query = `
-      SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp,
-             SUM(kw * 1300 / 1000) AS total_kW
-      FROM logs
-      WHERE DATE(timestamp) = CURDATE()
-      ORDER BY HOUR(timestamp);
-    `;
+      query = `
+        SELECT
+          (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 1) AS value1,
+          (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 2) AS value2
+        `;
+    } else {
+      sql = `
+        SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value
+        FROM power_meter
+        WHERE DATE(timestamp) = CURDATE() and no_device = ${device}
+        GROUP BY HOUR(timestamp)
+        ORDER BY HOUR(timestamp);
+      `;
+
+      query = `
+        SELECT DATE_FORMAT(timestamp, '%H:00-%H:59') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value1
+        FROM power_meter
+        WHERE DATE(timestamp) = CURDATE() and no_device = ${device}
+        ORDER BY HOUR(timestamp);
+      `;
+    }
 
     // Eksekusi query
     const [result] = await connection.execute(sql);
     const [result2] = await connection.execute(query);
 
+    const result2Value = [result2[0].value1, result2[0].value2];
     // Menyusun response data
     response.data = result;
-    response.summary = result2[0];
+    response.summary.total = result2Value;
 
     // Menutup koneksi ke database
     await connection.end();
@@ -1692,39 +1723,77 @@ app.get("/kw_day", async (req, res) => {
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
+    const device = req.query.device;
 
+    let response, sql, query;
     // json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Watt Day Cost"],
-    };
+    if (device == "all") {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Device 1", "Device 2"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Watt Hour Cost"],
+      };
+    }
 
     // Query untuk mendapatkan data penggunaan listrik per hari dan total penggunaan listrik
-    const sql = `
-      SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-             SUM(kw * 1300 / 1000) AS value
-      FROM logs
-      WHERE MONTH(timestamp) = MONTH(CURDATE())
-      GROUP BY DATE(timestamp)
-      ORDER BY DATE(timestamp);
-    `;
+    if (device == "all") {
+      sql = `
+      SELECT
+        COALESCE(d1.kw, 0) AS value1,
+        COALESCE(d2.kw, 0) AS value2,
+        COALESCE(d1.timestamp, d2.timestamp) AS timestamp
+      FROM
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = 1 GROUP BY DATE(timestamp)) AS d1
+      LEFT JOIN
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = 2 GROUP BY DATE(timestamp)) AS d2
+      ON d1.timestamp = d2.timestamp
+      ORDER BY DATE(d1.timestamp);
+      `;
 
-    const query = `
-      SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-             SUM(kw * 1300 / 1000) AS total_kW
-      FROM logs
-      WHERE MONTH(timestamp) = MONTH(CURDATE())
-      ORDER BY DATE(timestamp);
-    `;
+      query = `
+      SELECT
+        (SELECT SUM(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = 1) AS value1,
+        (SELECT SUM(kw) as kw FROM power_meter WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = 2) AS value2
+      `;
+    } else {
+      sql = `
+        SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value
+        FROM power_meter
+        WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = ${device}
+        GROUP BY DATE(timestamp)
+        ORDER BY DATE(timestamp);
+      `;
+
+      query = `
+        SELECT DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value1
+        FROM power_meter
+        WHERE MONTH(timestamp) = MONTH(CURDATE()) and no_device = ${device}
+        ORDER BY DATE(timestamp);
+      `;
+    }
 
     // Eksekusi query
     const [result] = await connection.execute(sql);
     const [result2] = await connection.execute(query);
+    const result2Value = [result2[0].value1, result2[0].value2];
 
     // Menyusun response data
     response.data = result;
-    response.summary = result2[0];
+    response.summary.total = result2Value;
 
     // Menutup koneksi ke database
     await connection.end();
@@ -1741,39 +1810,77 @@ app.get("/kw_month", async (req, res) => {
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
+    const device = req.query.device;
 
+    let response, sql, query;
     // json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Watt Month Cost"],
-    };
+    if (device == "all") {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Device 1", "Device 2"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Watt Hour Cost"],
+      };
+    }
 
     // Query untuk mendapatkan data penggunaan listrik per bulan dan total penggunaan listrik
-    const sql = `
-      SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-             SUM(kw * 1300 / 1000) AS value
-      FROM logs
-      WHERE YEAR(timestamp) = YEAR(CURDATE())
-      GROUP BY MONTH(timestamp)
-      ORDER BY MONTH(timestamp);
-    `;
+    if (device == "all") {
+      sql = `
+      SELECT
+        COALESCE(d1.kw, 0) AS value1,
+        COALESCE(d2.kw, 0) AS value2,
+        COALESCE(d1.timestamp, d2.timestamp) AS timestamp
+      FROM
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m') AS timestamp FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1 GROUP BY MONTH(timestamp)) AS d1
+      LEFT JOIN
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m') AS timestamp FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2 GROUP BY MONTH(timestamp)) AS d2
+      ON d1.timestamp = d2.timestamp
+      ORDER BY DATE(d1.timestamp);
+      `;
 
-    const query = `
-      SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-             SUM(kw * 1300 / 1000) AS total_kW
-      FROM logs
-      WHERE YEAR(timestamp) = YEAR(CURDATE())
-      ORDER BY MONTH(timestamp);
-    `;
+      query = `
+      SELECT
+        (SELECT SUM(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 1) AS value1,
+        (SELECT SUM(kw) as kw FROM power_meter WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = 2) AS value2
+      `;
+    } else {
+      sql = `
+        SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value
+        FROM power_meter
+        WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = ${device}
+        GROUP BY MONTH(timestamp)
+        ORDER BY MONTH(timestamp);
+      `;
+
+      query = `
+        SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+          SUM(kw * 1300 / 1000) AS value1
+        FROM power_meter
+        WHERE YEAR(timestamp) = YEAR(CURDATE()) and no_device = ${device}
+        ORDER BY MONTH(timestamp);
+      `;
+    }
 
     // Eksekusi query
     const [result] = await connection.execute(sql);
     const [result2] = await connection.execute(query);
+    const result2Value = [result2[0].value1, result2[0].value2];
 
     // Menyusun response data
     response.data = result;
-    response.summary = result2[0];
+    response.summary.total = result2Value;
 
     // Menutup koneksi ke database
     await connection.end();
@@ -1790,49 +1897,97 @@ app.get("/kw_custom", async (req, res) => {
   try {
     // Membuat koneksi ke database
     const connection = await mysql.createConnection(dbConfig);
+    const device = req.query.device;
 
+    let response, sql, query;
     // json response format
-    const response = {
-      status: "success",
-      data: {},
-      label: ["Watt Month Cost"],
-    };
+    if (device == "all") {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Device 1", "Device 2"],
+      };
+    } else {
+      response = {
+        status: "success",
+        data: {},
+        summary: {
+          total: {},
+        },
+        label: ["Watt Hour Cost"],
+      };
+    }
 
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
     // Query untuk mendapatkan data penggunaan listrik sesuai rentang tanggal yang diminta
-    const sql = `
-      SELECT * FROM (
-        SELECT
-          DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
-          SUM(kw) AS value
-        FROM logs
-        WHERE DATE(timestamp) BETWEEN ? AND ?
-        GROUP BY DATE(timestamp)
-        ORDER BY timestamp DESC
-        LIMIT 250
-      ) AS subquery
-      ORDER BY timestamp ASC;
-    `;
+    if (device == "all") {
+      sql = `
+      SELECT
+        COALESCE(d1.kw, 0) AS value1,
+        COALESCE(d2.kw, 0) AS value2,
+        COALESCE(d1.timestamp, d2.timestamp) AS timestamp
+      FROM
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 1 GROUP BY DATE(timestamp)) AS d1
+      LEFT JOIN
+        (SELECT SUM(kw) as kw, DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 2 GROUP BY DATE(timestamp)) AS d2
+      ON d1.timestamp = d2.timestamp
+      ORDER BY DATE(d1.timestamp);
+      `;
 
-    // Query untuk mendapatkan total penggunaan listrik dan rata-rata penggunaan listrik sesuai rentang tanggal yang diminta
-    const query = `
-      SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
-        SUM(kW) AS total_kW,
-        AVG(kw) AS avg_kW
-      FROM logs
-      WHERE DATE(timestamp) BETWEEN ? AND ?
-      ORDER BY timestamp;
-    `;
+      query = `
+      SELECT
+        (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 1) AS value1,
+        (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = 2) AS value2
+      `;
+    } else {
+      sql = `
+        SELECT * FROM (
+          SELECT
+            DATE_FORMAT(timestamp, '%Y-%m-%d') AS timestamp,
+            SUM(kw) AS value
+          FROM power_meter
+          WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = ${device}
+          GROUP BY DATE(timestamp)
+          ORDER BY timestamp DESC
+          LIMIT 250
+        ) AS subquery
+        ORDER BY timestamp ASC;
+      `;
+
+      // Query untuk mendapatkan total penggunaan listrik dan rata-rata penggunaan listrik sesuai rentang tanggal yang diminta
+      query = `
+        SELECT DATE_FORMAT(timestamp, '%Y-%m') AS timestamp,
+          SUM(kW) AS total_kW,
+          AVG(kw) AS avg_kW
+        FROM power_meter
+        WHERE DATE(timestamp) BETWEEN ? AND ? and no_device = ${device}
+        ORDER BY timestamp;
+      `;
+    }
 
     // Eksekusi query
-    const [result] = await connection.execute(sql, [startDate, endDate]);
-    const [result2] = await connection.execute(query, [startDate, endDate]);
+    const [result] = await connection.execute(
+      sql,
+      device == "all"
+        ? [startDate, endDate, startDate, endDate]
+        : [startDate, endDate]
+    );
+    const [result2] = await connection.execute(
+      query,
+      device == "all"
+        ? [startDate, endDate, startDate, endDate]
+        : [startDate, endDate]
+    );
+    const result2Value = [result2[0].value1, result2[0].value2];
 
     // Menyusun response data
     response.data = result;
-    response.summary = result2[0];
+    response.summary.total = result2Value;
 
     // Menutup koneksi ke database
     await connection.end();
@@ -1843,6 +1998,48 @@ app.get("/kw_custom", async (req, res) => {
     console.error("Error fetching data from database:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
+});
+
+app.get("/dashboard", async (req, res) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    let response, sql, query;
+
+    response = {
+      status: "success",
+      data: {},
+      summary: {
+        total: {},
+      },
+      label: ["Device 1", "Device 2"],
+    };
+
+    sql = `
+    SELECT
+      (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 1) AS value1,
+      (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 2) AS value2,
+      (SELECT SUM(kw) as kw FROM power_meter WHERE DATE(timestamp) = CURDATE() and no_device = 3) AS value3
+    `;
+
+    // Eksekusi query utama
+    const [result] = await connection.execute(sql, params);
+
+    // Eksekusi query tambahan untuk summary
+    // const [totalResult] = await connection.execute(totalQuery, params);
+
+    // Transform the totalResult and avgResult to arrays of values
+    // const totalValues = [
+    //   totalResult[0].value1,
+    //   totalResult[0].value2,
+    //   totalResult[0].value3,
+    // ];
+
+    response.data = result;
+    // response.summary.total = totalValues;
+
+    await connection.end();
+    res.json(response);
+  } catch (error) {}
 });
 
 // Menjalankan server
