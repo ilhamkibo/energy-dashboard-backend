@@ -373,8 +373,8 @@ app.get("/volt", async (req, res) => {
           ) AS subquery
           ORDER BY timestamp ASC;
           `;
+          if (device) params.push(device);
         }
-        if (device) params.push(device);
       } else if (req.query.date === "year") {
         // Query untuk mendapatkan rata-rata bulanan untuk tahun ini
         if (device == "volt1" || device == "volt2" || device == "volt3") {
@@ -429,8 +429,8 @@ app.get("/volt", async (req, res) => {
           ) AS subquery
           ORDER BY timestamp ASC;
           `;
+          if (device) params.push(device);
         }
-        if (device) params.push(device);
       } else {
         // Default: Query untuk mendapatkan data hari ini
         if (device == "volt1" || device == "volt2" || device == "volt3") {
@@ -463,9 +463,8 @@ app.get("/volt", async (req, res) => {
           ) AS subquery
           ORDER BY timestamp ASC;
           `;
+          if (device) params.push(device);
         }
-
-        if (device) params.push(device);
       }
     }
 
