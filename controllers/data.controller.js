@@ -201,14 +201,14 @@ async function getVoltData(req, res) {
               COALESCE(d3.${device}, 0) AS value3,
               COALESCE(d1.timestamp, d2.timestamp, d3.timestamp) AS timestamp
             FROM
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY timestamp DESC LIMIT 250) AS d1
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY id DESC LIMIT 250) AS d1
             LEFT JOIN
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY timestamp DESC LIMIT 250) AS d2
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY id DESC LIMIT 250) AS d2
             ON d1.timestamp = d2.timestamp
             LEFT JOIN
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY timestamp DESC LIMIT 250) AS d3
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY id DESC LIMIT 250) AS d3
             ON d1.timestamp = d3.timestamp
-            ORDER BY timestamp DESC;
+            ORDER BY timestamp;
           `;
         } else {
           sql = `
@@ -440,12 +440,12 @@ async function getCurrentData(req, res) {
               COALESCE(d3.${device}, 0) AS value3,
               COALESCE(d1.timestamp, d2.timestamp, d3.timestamp) AS timestamp
             FROM
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY timestamp DESC LIMIT 250) AS d1
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 1 ORDER BY id DESC LIMIT 250) AS d1
             LEFT JOIN
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY timestamp DESC LIMIT 250) AS d2
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 2 ORDER BY id DESC LIMIT 250) AS d2
             ON d1.timestamp = d2.timestamp
             LEFT JOIN
-              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY timestamp DESC LIMIT 250) AS d3
+              (SELECT ${device}, DATE_FORMAT(timestamp, '%H:%i:%s') as timestamp FROM power_meter WHERE no_device = 3 ORDER BY id DESC LIMIT 250) AS d3
             ON d1.timestamp = d3.timestamp
 
             ORDER BY timestamp DESC;
@@ -1630,10 +1630,7 @@ async function getDashboardData(req, res) {
     const response = {
       status: "success",
       data: {},
-      summary: {
-        total: {},
-      },
-      label: ["Device 1", "Device 2"],
+      label: ["Power Meter 1", "Power Meter 2", "Power Meter 3"],
     };
 
     // Query untuk mendapatkan data penggunaan listrik per jam dan total penggunaan listrik

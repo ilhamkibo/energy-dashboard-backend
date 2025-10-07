@@ -10,8 +10,8 @@ const client = mqtt.connect("mqtt://broker.emqx.io:1883");
 const dbConfig = {
   host: "localhost",
   user: "root",
-  database: "power_monitoring",
-  port: 3306,
+  database: "power_monitor",
+  port: 4306,
   // password: '',
 };
 
@@ -153,7 +153,7 @@ client.subscribe("toho").on("message", (topic, payload) => {
   try {
     // console.log("🚀 ~ client.subscribe ~ payload:", payload);
     const data = JSON.parse(payload);
-    // console.log("🚀 ~ client.subscribe ~ data:", data);
+    console.log("🚀 ~ client.subscribe ~ data:", data);
     const raw_data_array = [];
     insertData(data);
 
